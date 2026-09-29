@@ -2,13 +2,20 @@
 # Установка бота на сервер Ubuntu (например, DigitalOcean Droplet).
 # Запуск:  bash deploy/install.sh   (из папки репозитория, под root)
 set -euo pipefail
+trap 'echo; echo "ОШИБКА: установка остановилась. Пришлите строки выше (без ключей)."' ERR
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Запустите через sudo: sudo bash $0"; exit 1
+fi
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$APP_DIR/.env"
 
 echo "==> Устанавливаю Python"
-apt-get update -qq
-apt-get install -y -qq python3 python3-venv
+# На новом сервере в фоне могут идти обновления — ждём, пока они закончатся.
+APT="apt-get -o DPkg::Lock::Timeout=600"
+$APT update
+DEBIAN_FRONTEND=noninteractive $APT install -y python3 python3-venv
 
 echo "==> Устанавливаю зависимости"
 python3 -m venv "$APP_DIR/.venv"
@@ -18,8 +25,15 @@ python3 -m venv "$APP_DIR/.venv"
 if [ ! -f "$ENV_FILE" ]; then
   echo
   echo "==> Вставьте ключи (при вставке символы не отображаются — это нормально)"
-  read -rsp "TG_TOKEN (токен от @BotFather): " TG_TOKEN; echo
-  read -rsp "ANTHROPIC_KEY (ключ Anthropic): " ANTHROPIC_KEY; echo
+  TG_TOKEN=""; ANTHROPIC_KEY=""
+  while [ -z "$TG_TOKEN" ]; do
+    read -rsp ">>> Вставьте TG_TOKEN (токен от @BotFather) и нажмите Enter: " TG_TOKEN; echo
+  done
+  echo "    принято"
+  while [ -z "$ANTHROPIC_KEY" ]; do
+    read -rsp ">>> Вставьте ANTHROPIC_KEY (ключ Anthropic) и нажмите Enter: " ANTHROPIC_KEY; echo
+  done
+  echo "    принято"
   umask 077
   printf 'TG_TOKEN=%s\nANTHROPIC_KEY=%s\n' "$TG_TOKEN" "$ANTHROPIC_KEY" > "$ENV_FILE"
 fi
