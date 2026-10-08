@@ -25,15 +25,27 @@ python3 -m venv "$APP_DIR/.venv"
 if [ ! -f "$ENV_FILE" ]; then
   echo
   echo "==> Вставьте ключи (при вставке символы не отображаются — это нормально)"
+  # Убираем невидимые символы (например, от Ctrl+V) и пробелы по краям.
+  clean() { printf '%s' "$1" | tr -cd '[:graph:]'; }
   TG_TOKEN=""; ANTHROPIC_KEY=""
-  while [ -z "$TG_TOKEN" ]; do
+  while :; do
     read -rsp ">>> Вставьте TG_TOKEN (токен от @BotFather) и нажмите Enter: " TG_TOKEN; echo
+    TG_TOKEN="$(clean "$TG_TOKEN")"
+    if [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]]; then
+      echo "    принято (начинается на ${TG_TOKEN:0:6}..., длина ${#TG_TOKEN})"; break
+    fi
+    echo "    Это не похоже на токен Telegram (вид: 123456789:AAH...). Попробуйте ещё раз."
+    echo "    Вставляйте правой кнопкой мыши -> Paste или Ctrl+Shift+V (не Ctrl+V)."
   done
-  echo "    принято"
-  while [ -z "$ANTHROPIC_KEY" ]; do
+  while :; do
     read -rsp ">>> Вставьте ANTHROPIC_KEY (ключ Anthropic) и нажмите Enter: " ANTHROPIC_KEY; echo
+    ANTHROPIC_KEY="$(clean "$ANTHROPIC_KEY")"
+    if [[ "$ANTHROPIC_KEY" =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]]; then
+      echo "    принято (начинается на ${ANTHROPIC_KEY:0:10}..., длина ${#ANTHROPIC_KEY})"; break
+    fi
+    echo "    Это не похоже на ключ Anthropic (вид: sk-ant-...). Попробуйте ещё раз."
+    echo "    Вставляйте правой кнопкой мыши -> Paste или Ctrl+Shift+V (не Ctrl+V)."
   done
-  echo "    принято"
   umask 077
   printf 'TG_TOKEN=%s\nANTHROPIC_KEY=%s\n' "$TG_TOKEN" "$ANTHROPIC_KEY" > "$ENV_FILE"
 fi

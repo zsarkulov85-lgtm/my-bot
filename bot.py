@@ -45,7 +45,12 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("my-bot")
 
-claude = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_KEY"])
+def env_key(name: str) -> str:
+    """Читает ключ из окружения, убирая пробелы и невидимые символы."""
+    return "".join(ch for ch in os.environ[name] if ch.isprintable() and not ch.isspace())
+
+
+claude = anthropic.AsyncAnthropic(api_key=env_key("ANTHROPIC_KEY"))
 
 # История хранится только текстом (без блоков thinking), поэтому её можно
 # свободно обрезать до последних MAX_HISTORY_MESSAGES сообщений.
@@ -127,7 +132,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def main() -> None:
-    app = Application.builder().token(os.environ["TG_TOKEN"]).build()
+    app = Application.builder().token(env_key("TG_TOKEN")).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
