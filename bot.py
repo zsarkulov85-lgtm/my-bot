@@ -23,8 +23,16 @@ from telegram.ext import (
 MODEL = "claude-opus-5-5"
 SYSTEM_PROMPT = (
     "Ты дружелюбный помощник в Telegram. Отвечай кратко и по делу, "
-    "на языке собеседника. Не используй Markdown-разметку."
+    "на языке собеседника. Не используй Markdown-разметку. "
+    "Если вопрос касается свежих событий, новостей, цен, погоды или "
+    "чего-то, что могло измениться, ищи ответ в интернете и указывай источники."
 )
+# Поиск и чтение страниц в интернете выполняются на серверах Anthropic.
+TOOLS = [
+    {"type": "web_search_20260209", "name": "web_search", "max_uses": 5},
+    {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 5},
+]
+MAX_CONTINUATIONS = 5  # сколько раз продолжать долгий поиск (pause_turn)
 MAX_HISTORY_MESSAGES = 20  # сколько последних сообщений диалога помнить
 TELEGRAM_LIMIT = 4096  # максимальная длина одного сообщения в Telegram
 
@@ -49,21 +57,33 @@ async def ask_claude(chat_id: int, text: str) -> str:
     while messages and messages[0]["role"] != "user":
         messages.pop(0)
 
-    response = await claude.beta.messages.create(
-        model=MODEL,
-        max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        messages=messages,
-        output_config={"effort": "low"},
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-    )
+    request = list(messages)
+    parts: list[str] = []
+    paused_blocks: list = []
+    for _ in range(MAX_CONTINUATIONS + 1):
+        response = await claude.beta.messages.create(
+            model=MODEL,
+            max_tokens=16000,
+            system=SYSTEM_PROMPT,
+            messages=request,
+            tools=TOOLS,
+            output_config={"effort": "low"},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+        parts += [b.text for b in response.content if b.type == "text"]
+        if response.stop_reason != "pause_turn":
+            break
+        # Долгий поиск прервался на середине — отправляем ответ обратно,
+        # и сервер продолжит с того же места.
+        paused_blocks += response.content
+        request = list(messages) + [{"role": "assistant", "content": paused_blocks}]
 
     if response.stop_reason == "refusal":
         messages.pop()  # не сохраняем вопрос, на который не удалось ответить
         return "Извините, на это я ответить не могу."
 
-    answer = "".join(b.text for b in response.content if b.type == "text").strip()
+    answer = "".join(parts).strip()
     if not answer:
         answer = "…"
     messages.append({"role": "assistant", "content": answer})
