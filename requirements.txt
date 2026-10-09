@@ -1,2 +1,2 @@
 anthropic>=1.9,<2
-python-telegram-bot>=22,<23
+python-telegram-bot[job-queue]>=22,<23
